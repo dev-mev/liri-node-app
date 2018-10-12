@@ -1,36 +1,31 @@
 require("dotenv").config();
+var moment = require("moment");
+var request = require("request");
+var Spotify = require("node-spotify-api");
+var keys = require("./keys.js");
+// var fs = require("fs");
 
-request("https://www.npmjs.com/package/node-spotify-api");
-request("(https://www.npmjs.com/package/request");
-request("http://www.omdbapi.com");
-request("http://www.artists.bandsintown.com/bandsintown-api");
-request("https://www.npmjs.com/package/moment");
-request("https://www.npmjs.com/package/dotenv");
+// request("http://www.omdbapi.com/?t=remember+the+titans&y=&plot=short&apikey=trilogy", function (error, response, body) {
+//   if (!error && response.statusCode === 200) {
+//     console.log("The movie's rating is: " + JSON.parse(body).imdbRating);
+//   }
+// });
 
-// 8. Add the code required to import the `keys.js` file and store it in a variable.
-
-var spotify = new Spotify(keys.spotify);
-
-// 9. Make it so liri.js can take in one of the following commands:
-
-//    * `concert-this`
-
-//    * `spotify-this-song`
-
-//    * `movie-this`
-
-//    * `do-what-it-says`
-
-
-// 1. `node liri.js concert-this <artist/band name here>`
-
-//    * This will search the Bands in Town Artist Events API (`"https://rest.bandsintown.com/artists/" + artist + "/events?app_id=codingbootcamp"`) for an artist and render the following information about each event to the terminal:
-
-//      * Name of the venue
-
-//      * Venue location
-
-//      * Date of the Event (use moment to format this as "MM/DD/YYYY")
+// Bands in Town
+if (process.argv[2] === "concert-this") {
+  var artist = process.argv.slice(3).join(" ");
+  request("https://rest.bandsintown.com/artists/" + artist + "/events?app_id=codingbootcamp",
+    function (error, response, body) {
+      if (!error && response.statusCode === 200) {
+        for (let i = 0; i < JSON.parse(body).length; i++) {
+          const artistObject = JSON.parse(body)[i];
+          console.log(moment(artistObject.datetime).format("MM/DD/YYYY") + "\r\n"
+          + artistObject.venue.name + "\r\n"
+          + artistObject.venue.city + ", " + artistObject.venue.region + " " + artistObject.venue.country + "\r\n");
+        }
+      }
+    });
+}
 
 // 2. `node liri.js spotify-this-song '<song name here>'`
 
@@ -47,6 +42,18 @@ var spotify = new Spotify(keys.spotify);
 //    * If no song is provided then your program will default to "The Sign" by Ace of Base.
 
 //    * You will utilize the [node-spotify-api](https://www.npmjs.com/package/node-spotify-api) package in order to retrieve song information from the Spotify API.
+
+if (process.argv[2] === "spotify-this-song") {
+  var spotify = new Spotify(keys.spotify);
+  var song = process.argv.splice(3).join(" ");
+
+  spotify.search({ type: "track", query: song }, function (err, data) {
+    if (err) {
+      return console.log("Error occurred: " + err);
+    }
+    console.log(data.tracks.items[0].album.artists[0].name);
+  });
+}
 
 // 3. `node liri.js movie-this '<movie name here>'`
 
