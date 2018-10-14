@@ -1,87 +1,135 @@
 require("dotenv").config();
-var moment = require("moment");
-var request = require("request");
-var Spotify = require("node-spotify-api");
-var keys = require("./keys.js");
-// var fs = require("fs");
+const fs = require("fs");
+const moment = require("moment");
+const request = require("request");
+const Spotify = require("node-spotify-api");
+const keys = require("./keys.js");
 
-// request("http://www.omdbapi.com/?t=remember+the+titans&y=&plot=short&apikey=trilogy", function (error, response, body) {
-//   if (!error && response.statusCode === 200) {
-//     console.log("The movie's rating is: " + JSON.parse(body).imdbRating);
-//   }
-// });
-
-// Bands in Town
-if (process.argv[2] === "concert-this") {
-  var artist = process.argv.slice(3).join(" ");
-  request("https://rest.bandsintown.com/artists/" + artist + "/events?app_id=codingbootcamp",
-    function (error, response, body) {
-      if (!error && response.statusCode === 200) {
-        for (let i = 0; i < JSON.parse(body).length; i++) {
-          const artistObject = JSON.parse(body)[i];
-          console.log(moment(artistObject.datetime).format("MM/DD/YYYY") + "\r\n"
-          + artistObject.venue.name + "\r\n"
-          + artistObject.venue.city + ", " + artistObject.venue.region + " " + artistObject.venue.country + "\r\n");
-        }
-      }
-    });
-}
-
-// 2. `node liri.js spotify-this-song '<song name here>'`
-
-//    * This will show the following information about the song in your terminal/bash window
-
-//      * Artist(s)
-
-//      * The song's name
-
-//      * A preview link of the song from Spotify
-
-//      * The album that the song is from
-
-//    * If no song is provided then your program will default to "The Sign" by Ace of Base.
-
-//    * You will utilize the [node-spotify-api](https://www.npmjs.com/package/node-spotify-api) package in order to retrieve song information from the Spotify API.
-
-if (process.argv[2] === "spotify-this-song") {
-  var spotify = new Spotify(keys.spotify);
-  var song = process.argv.splice(3).join(" ");
-
-  spotify.search({ type: "track", query: song }, function (err, data) {
+// LOG RESULTS
+function writeInfo(info) {
+  fs.appendFile("log.txt", info, (err) => {
     if (err) {
-      return console.log("Error occurred: " + err);
+      console.log(err);
+      return;
     }
-    console.log(data.tracks.items[0].album.artists[0].name);
+    console.log("log.txt was updated!");
   });
 }
 
-// 3. `node liri.js movie-this '<movie name here>'`
+function runCommand(command, arg) {
+  // BANDS IN TOWN
+  // Tried to handle if there were no results, couldn't figure it out.
+  if (command === "concert-this") {
+    const artist = arg;
+    let eventInfo;
+    if (artist === "") {
+      console.log("Enter a band or artist.");
+      return;
+    }
 
-//    * This will output the following information to your terminal/bash window:
+    request("https://rest.bandsintown.com/artists/" + encodeURIComponent(artist) + "/events?app_id=codingbootcamp",
+      function (error, response, body) {
+        if (!error && response.statusCode === 200) {
+          const results = JSON.parse(body);
 
-//      ```
-//        * Title of the movie.
-//        * Year the movie came out.
-//        * IMDB Rating of the movie.
-//        * Rotten Tomatoes Rating of the movie.
-//        * Country where the movie was produced.
-//        * Language of the movie.
-//        * Plot of the movie.
-//        * Actors in the movie.
-//      ```
+          for (let i = 0; i < Math.min(10, results.length); i++) {
+            const artistObject = results[i];
+            eventInfo = moment(artistObject.datetime).format("MM/DD/YYYY") + "\n"
+              + artistObject.venue.name + "\n"
+              + artistObject.venue.city + ", " + artistObject.venue.region + " " + artistObject.venue.country + "\n";
+            console.log(eventInfo);
+            writeInfo(eventInfo + "\n");
+          }
+        }
+      });
+  }
 
-//    * If the user doesn't type a movie in, the program will output data for the movie 'Mr. Nobody.'
+  // SPOTIFY
+  if (command === "spotify-this-song") {
+    const spotify = new Spotify(keys.spotify);
+    let song = arg;
+    if (song === "") {
+      song = "The Sign Ace of Base";
+    }
 
-//      * If you haven't watched "Mr. Nobody," then you should: <http://www.imdb.com/title/tt0485947/>
+    spotify.search({ type: "track", query: song }, function (err, data) {
+      let musicInfo;
+      if (err) {
+        console.log("Error occurred: " + err);
+        return;
+      }
 
-//      * It's on Netflix!
+      if (data.tracks.items.length >= 1) {
+        for (let i = 0; i < Math.min(10, data.tracks.items.length); i++) {
+          const trackInfo = data.tracks.items[i];
+          musicInfo = trackInfo.artists.map(artist => artist.name).join(" // ") + "\n" // handles multiple artists
+            + trackInfo.name + "\n"
+            + trackInfo.preview_url + "\n"
+            + trackInfo.album.name + "\n";
+          console.log(musicInfo);
+          writeInfo(musicInfo + "\n");
+        }
+      } else { console.log("no results"); }
+    });
+  }
 
-//    * You'll use the request package to retrieve data from the OMDB API. Like all of the in-class activities, the OMDB API requires an API key. You may use `trilogy`.
+  // OMDB
+  if (command === "movie-this") {
+    let movie = arg;
+    let movieInfo;
 
-// 4. `node liri.js do-what-it-says`
+    if (movie === "") {
+      movie = "Mr. Nobody";
+    }
 
-//    * Using the `fs` Node package, LIRI will take the text inside of random.txt and then use it to call one of LIRI's commands.
+    request(
+      "http://www.omdbapi.com/?t=" + encodeURIComponent(movie) + "&y=&plot=short&apikey=trilogy",
+      function (error, response, body) {
+        if (!error && response.statusCode === 200) {
+          const movieObject = JSON.parse(body);
 
-//      * It should run `spotify-this-song` for "I Want it That Way," as follows the text in `random.txt`.
+          // handles if there are no results
+          if (movieObject.Response === "True") {
+            // loops through array to find Rotten Tomatoes, if found, returns rating info
+            const rottenToms = movieObject.Ratings.find(rating => rating.Source === "Rotten Tomatoes");
 
-//      * Edit the text in random.txt to test out the feature for movie-this and my-tweets
+            // learned shorthand for conditional assignment
+            const rottenTomsVal = rottenToms !== undefined
+              ? rottenToms.Value
+              : "none";
+
+            movieInfo = "Title: " + movieObject.Title + "\n"
+              + "Year: " + movieObject.Year + "\n"
+              + "IMDB rating: " + movieObject.imdbRating + "\n"
+              + "Rotten Tomatoes rating: " + rottenTomsVal + "\n"
+              + "Country: " + movieObject.Country + "\n"
+              + "Language: " + movieObject.Language + "\n"
+              + "Plot: " + movieObject.Plot + "\n"
+              + "Actors: " + movieObject.Actors + "\n";
+            console.log(movieInfo);
+            writeInfo(movieInfo + "\n");
+          } else {
+            console.log("No results found.");
+          }
+        }
+      }
+    );
+  }
+
+  // DO WHAT IT SAYS
+  if (command === "do-what-it-says") {
+    fs.readFile("random.txt", "utf8", function (error, data) {
+      if (error) {
+        console.log(error);
+        return;
+      }
+      const randomText = data.split(",");
+      runCommand(randomText[0], randomText[1]);
+    });
+  }
+}
+
+const command = process.argv[2];
+const arg = process.argv.slice(3).join(" ");
+
+runCommand(command, arg);
